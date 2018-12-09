@@ -32,7 +32,8 @@ define the getter methods.
 __all__ = ("PROPERTIES", )
 
 
-PROPERTIES = {"telescope": ("Full name of the telescope.", "str"),
+PROPERTIES = {
+    "telescope": ("Full name of the telescope.", "str"),
               "instrument": ("The instrument used to observe the exposure.", "str"),
               "location": ("Location of the observatory.", "astropy.coordinates.EarthLocation"),
               "exposure_id": ("Unique (with instrument) integer identifier for this observation.", "int"),

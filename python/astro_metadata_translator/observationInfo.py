@@ -21,7 +21,7 @@
 
 """Represent standard metadata from instrument headers"""
 
-__all__ = ("ObservationInfo", )
+__all__ = ("SuperObservationInfo", "ObservationInfo", )
 
 import itertools
 import logging
@@ -35,7 +35,7 @@ from .properties import PROPERTIES
 log = logging.getLogger(__name__)
 
 
-class ObservationInfo:
+class SuperObservationInfo:
     """Standardized representation of an instrument header for a single
     exposure observation.
 
@@ -65,9 +65,21 @@ class ObservationInfo:
         The supplied translator class was not a MetadataTranslator.
     """
 
-    _PROPERTIES = PROPERTIES
-    """All the properties supported by this class with associated
-    documentation."""
+    _PROPERTIES = {}
+
+    def __init_subclass__(cls, properties=None):
+        super().__init_subclass__()
+
+        if properties is None:
+            properties = PROPERTIES
+
+        cls._PROPERTIES = properties
+
+        # Initialize the internal properties (underscored) and add the associated
+        # getter methods.
+        for name, description in cls._PROPERTIES.items():
+            setattr(cls, f"_{name}", None)
+            setattr(cls, name, property(_make_property(name, *description)))
 
     def __init__(self, header, filename=None, translator_class=None, pedantic=False):
 
@@ -225,8 +237,5 @@ def _make_property(property, doc, return_type):
     return getter
 
 
-# Initialize the internal properties (underscored) and add the associated
-# getter methods.
-for name, description in ObservationInfo._PROPERTIES.items():
-    setattr(ObservationInfo, f"_{name}", None)
-    setattr(ObservationInfo, name, property(_make_property(name, *description)))
+class ObservationInfo(SuperObservationInfo, properties=PROPERTIES):
+    pass

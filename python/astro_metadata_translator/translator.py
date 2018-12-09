@@ -97,7 +97,7 @@ class MetadataTranslator:
     """Name of instrument understood by this translation class."""
 
     @staticmethod
-    def _make_const_mapping(property_key, constant):
+    def _make_const_mapping(property_key, constant, properties):
         """Make a translator method that returns a constant value.
 
         Parameters
@@ -106,6 +106,8 @@ class MetadataTranslator:
             Name of the property to be calculated (for the docstring).
         constant : `str` or `numbers.Number`
             Value to return for this translator.
+        properties : `dict`
+            The property list to use to construct this class.
 
         Returns
         -------
@@ -115,8 +117,8 @@ class MetadataTranslator:
         def constant_translator(self):
             return constant
 
-        if property_key in PROPERTIES:
-            property_doc, return_type = PROPERTIES[property_key]
+        if property_key in properties:
+            property_doc, return_type = properties[property_key]
         else:
             return_type = type(constant).__name__
             property_doc = f"Returns constant value for '{property_key}' property"
@@ -131,7 +133,7 @@ class MetadataTranslator:
         return constant_translator
 
     @staticmethod
-    def _make_trivial_mapping(property_key, header_key, default=None, minimum=None, maximum=None,
+    def _make_trivial_mapping(property_key, header_key, properties, default=None, minimum=None, maximum=None,
                               unit=None, checker=None):
         """Make a translator method returning a header value.
 
@@ -149,6 +151,8 @@ class MetadataTranslator:
             Name of the key to look up in the header. If a `list` each
             key will be tested in turn until one matches.  This can deal with
             header styles that evolve over time.
+        properties : `dict`
+            The property list to use to construct this class.
         default : `numbers.Number` or `astropy.units.Quantity`, `str`, optional
             If not `None`, default value to be used if the parameter read from
             the header is not defined or if the header is missing.
@@ -173,8 +177,8 @@ class MetadataTranslator:
             Function implementing a translator with the specified
             parameters.
         """
-        if property_key in PROPERTIES:
-            property_doc, return_type = PROPERTIES[property_key]
+        if property_key in properties:
+            property_doc, return_type = properties[property_key]
         else:
             return_type = "str` or `numbers.Number"
             property_doc = f"Map '{header_key}' header keyword to '{property_key}' property"
@@ -228,7 +232,7 @@ class MetadataTranslator:
         return trivial_translator
 
     @classmethod
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, properties=PROPERTIES, **kwargs):
         """Register all subclasses with the base class and create dynamic
         translator methods.
 
@@ -264,21 +268,21 @@ class MetadataTranslator:
             if type(header_key) == tuple:
                 kwargs = header_key[1]
                 header_key = header_key[0]
-            translator = cls._make_trivial_mapping(property_key, header_key, **kwargs)
+            translator = cls._make_trivial_mapping(property_key, header_key, properties, **kwargs)
             method = f"to_{property_key}"
             translator.__name__ = f"{method}_trivial"
             setattr(cls, method, cache_translation(translator, method=method))
-            if property_key not in PROPERTIES:
+            if property_key not in properties:
                 log.warning(f"Unexpected trivial translator for '{property_key}' defined in {cls}")
 
         # Go through the constant mappings for this class and create
         # corresponding translator methods
         for property_key, constant in cls._const_map.items():
-            translator = cls._make_const_mapping(property_key, constant)
+            translator = cls._make_const_mapping(property_key, constant, properties)
             method = f"to_{property_key}"
             translator.__name__ = f"{method}_constant"
             setattr(cls, method, translator)
-            if property_key not in PROPERTIES:
+            if property_key not in properties:
                 log.warning(f"Unexpected constant translator for '{property_key}' defined in {cls}")
 
     def __init__(self, header, filename=None):
@@ -426,18 +430,23 @@ class MetadataTranslator:
             The supplied header key is not present.
         """
         keywords = keywords if isinstance(keywords, list) else [keywords]
+        keyword = None
         for k in keywords:
             if k in self._header:
                 value = self._header[k]
                 keyword = k
                 break
         else:
-            raise KeyError(f"Could not find {keywords} in header")
+            if default is not None:
+                value = default
+            else:
+                raise KeyError(f"Could not find {keywords} in header")
+        if keyword:
+            self._used_these_cards(keyword)
         if isinstance(value, str):
             # Sometimes the header has the wrong type in it but this must
             # be a number if we are creating a quantity.
             value = float(value)
-        self._used_these_cards(keyword)
         if default is not None:
             value = self.validate_value(value, default, maximum=maximum, minimum=minimum)
         return u.Quantity(value, unit=unit)
